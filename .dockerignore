@@ -1,0 +1,10 @@
+venv
+__pycache__
+*.pyc
+.git
+data/videos
+data/*.mp4
+data/*_events.jsonl
+data/all_detected_events.jsonl
+data/enriched_events.jsonl
+yolov8n.pt

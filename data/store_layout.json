@@ -1,0 +1,42 @@
+{
+  "stores": [
+    {
+      "store_id": "STORE_001",
+      "open_hours": {
+        "start": "10:00",
+        "end": "22:00"
+      },
+      "cameras": [
+        {
+          "camera_id": "CAM_1",
+          "video_file": "CAM 1.mp4",
+          "type": "ENTRY",
+          "entry_line": [[0, 600], [1920, 600]],
+          "zones": []
+        },
+        {
+          "camera_id": "CAM_2",
+          "video_file": "CAM 2.mp4",
+          "type": "FLOOR",
+          "zones": [
+            {
+              "zone_id": "MAIN_FLOOR",
+              "polygon": [[200, 200], [1700, 200], [1700, 950], [200, 950]]
+            }
+          ]
+        },
+        {
+          "camera_id": "CAM_3",
+          "video_file": "CAM 3.mp4",
+          "type": "BILLING",
+          "zones": [
+            {
+              "zone_id": "BILLING",
+              "polygon": [[300, 250], [1600, 250], [1600, 1000], [300, 1000]]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

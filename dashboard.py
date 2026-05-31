@@ -1,0 +1,292 @@
+import streamlit as st
+import requests
+import pandas as pd
+
+API_BASE = "http://127.0.0.1:8000"
+STORE_ID = "STORE_001"
+
+
+st.set_page_config(
+    page_title="Store Intelligence Dashboard",
+    page_icon="🏪",
+    layout="wide"
+)
+st.markdown("""
+<style>
+
+.block-container{
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
+.metric-box{
+    background: linear-gradient(135deg,#1f2937,#111827);
+    padding:18px;
+    border-radius:16px;
+    border:1px solid #374151;
+    text-align:center;
+}
+
+.insight-box{
+    background:#111827;
+    padding:18px;
+    border-radius:16px;
+    border:1px solid #263244;
+    margin-bottom:15px;
+}
+
+.alert-box{
+    background:#2b1619;
+    padding:18px;
+    border-radius:14px;
+    border-left:5px solid #ef4444;
+    margin-bottom:12px;
+}
+
+.section-title{
+    margin-top:20px;
+    margin-bottom:15px;
+}
+
+.small-text{
+    color:#9CA3AF;
+    font-size:14px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+# Store Intelligence Dashboard
+
+<div class="small-text">
+Real-time retail analytics generated from CCTV event processing,
+visitor journey tracking, zone engagement analysis,
+billing activity monitoring, and operational alerts.
+</div>
+""", unsafe_allow_html=True)
+if st.button("🔄 Refresh Dashboard"):
+    st.rerun()
+
+try:
+    metrics = requests.get(f"{API_BASE}/stores/{STORE_ID}/metrics").json()
+    funnel = requests.get(f"{API_BASE}/stores/{STORE_ID}/funnel").json()
+    heatmap = requests.get(f"{API_BASE}/stores/{STORE_ID}/heatmap").json()
+    anomalies = requests.get(f"{API_BASE}/stores/{STORE_ID}/anomalies").json()
+    health = requests.get(f"{API_BASE}/health").json()
+except Exception:
+    st.error("API is not reachable. Start FastAPI first using uvicorn or docker compose.")
+    st.stop()
+
+st.divider()
+
+# KPI CARDS
+col1, col2, col3, col4, col5 = st.columns(5)
+
+col1.metric("Visitors", metrics["unique_visitors"])
+col2.metric(" Entries", metrics["entry_count"])
+col3.metric(" Billing Visitors", metrics["billing_visitors"])
+col4.metric(" Conversion Rate", f'{metrics["conversion_rate"]}%')
+col5.metric(" Queue Depth", metrics["current_queue_depth"])
+
+st.divider()
+
+# BUSINESS INSIGHTS
+st.subheader("📊 Business Insights")
+
+insight_col1, insight_col2, insight_col3 = st.columns(3)
+
+with insight_col1:
+    if metrics["conversion_rate"] < 20:
+        st.warning(
+            f"Conversion is low at {metrics['conversion_rate']}%. "
+            "Visitors are engaging but checkout completion needs attention."
+        )
+    else:
+        st.success(
+            f"Conversion is healthy at {metrics['conversion_rate']}%."
+        )
+
+with insight_col2:
+    if metrics["billing_visitors"] > 0:
+        st.success(
+            f"{metrics['billing_visitors']} visitors reached the billing zone."
+        )
+    else:
+        st.info("No billing-zone visitors detected yet.")
+
+with insight_col3:
+    if metrics["current_queue_depth"] >= 3:
+        st.warning("Billing queue depth is high. Consider opening another counter.")
+    else:
+        st.success("Billing queue is currently under control.")
+
+st.divider()
+
+# FUNNEL + HEATMAP
+left, right = st.columns(2)
+
+with left:
+    st.subheader("📉 Conversion Funnel")
+
+    funnel_df = pd.DataFrame([
+        {"Stage": "Entry", "Count": funnel["funnel"]["entry"]},
+        {"Stage": "Zone Visit", "Count": funnel["funnel"]["zone_visit"]},
+        {"Stage": "Billing Queue", "Count": funnel["funnel"]["billing_queue"]},
+        {"Stage": "Purchase", "Count": funnel["funnel"]["purchase"]}
+    ])
+
+    st.dataframe(funnel_df, use_container_width=True, hide_index=True)
+    st.bar_chart(funnel_df.set_index("Stage"))
+
+    st.caption(
+        f"Entry → Zone Drop-off: {funnel['dropoff_percent']['entry_to_zone']}% | "
+        f"Zone → Billing Drop-off: {funnel['dropoff_percent']['zone_to_billing']}%"
+    )
+
+with right:
+    st.subheader("🔥 Zone Heatmap")
+
+    heatmap_df = pd.DataFrame(heatmap["heatmap"])
+
+    if not heatmap_df.empty:
+        heatmap_display = heatmap_df[
+            ["zone_id", "visit_frequency", "avg_dwell_ms", "normalized_score", "data_confidence"]
+        ].copy()
+
+        heatmap_display["avg_dwell_sec"] = (
+            heatmap_display["avg_dwell_ms"] / 1000
+        ).round(2)
+
+        heatmap_display = heatmap_display[
+            ["zone_id", "visit_frequency", "avg_dwell_sec", "normalized_score", "data_confidence"]
+        ]
+
+        st.dataframe(
+            heatmap_display,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.bar_chart(
+            heatmap_display.set_index("zone_id")["normalized_score"]
+        )
+    else:
+        st.info("No heatmap data available yet.")
+
+st.divider()
+
+# STORE LAYOUT
+st.subheader("🗺️ Store Layout Intelligence")
+
+layout_col1, layout_col2, layout_col3 = st.columns(3)
+
+zone_lookup = {}
+if not heatmap_df.empty:
+    for _, row in heatmap_df.iterrows():
+        zone_lookup[row["zone_id"]] = row
+
+def zone_card(zone_name, title):
+    data = zone_lookup.get(zone_name)
+
+    if data is not None:
+        visits = int(data["visit_frequency"])
+        dwell = round(data["avg_dwell_ms"] / 1000, 2)
+        score = round(data["normalized_score"], 2)
+
+        st.markdown(f"""
+### {title}
+
+**Zone ID:** `{zone_name}`  
+**Visits:** {visits}  
+**Avg Dwell:** {dwell} sec  
+**Engagement Score:** {score}/100
+""")
+    else:
+        st.info(f"No data available for {title}")
+
+with layout_col1:
+    zone_card("COSMETICS_A", "💄 Cosmetics Zone A")
+
+with layout_col2:
+    zone_card("COSMETICS_B", "🧴 Cosmetics Zone B")
+
+with layout_col3:
+    zone_card("BILLING", "🧾 Billing Counter")
+
+st.divider()
+
+# DWELL TIME
+st.subheader("⏱ Average Dwell Time Per Zone")
+
+dwell_data = metrics.get("avg_dwell_per_zone", {})
+
+if dwell_data:
+    dwell_df = pd.DataFrame([
+        {
+            "Zone": zone,
+            "Avg Dwell (sec)": round(dwell / 1000, 2)
+        }
+        for zone, dwell in dwell_data.items()
+    ])
+
+    st.dataframe(dwell_df, use_container_width=True, hide_index=True)
+    st.bar_chart(dwell_df.set_index("Zone"))
+else:
+    st.info("No dwell data available.")
+
+st.divider()
+
+# ANOMALIES + HEALTH
+col7, col8 = st.columns(2)
+
+with col7:
+    st.subheader("Operational Alerts")
+
+    if anomalies["active_anomalies"]:
+
+        for anomaly in anomalies["active_anomalies"]:
+
+            title = anomaly["type"].replace("_", " ").title()
+            severity = anomaly["severity"]
+            action = anomaly["suggested_action"]
+
+            color = "#ef4444" if severity == "CRITICAL" else "#f59e0b"
+
+            st.markdown(f"""
+            <div style="
+                background:#1f2937;
+                padding:18px;
+                border-radius:14px;
+                border-left:5px solid {color};
+                margin-bottom:12px;
+            ">
+
+            <h4 style="margin-bottom:10px;">{title}</h4>
+
+            <p><b>Severity:</b> {severity}</p>
+
+            <p><b>Recommended Action:</b><br>
+            {action}</p>
+
+            </div>
+            """, unsafe_allow_html=True)
+
+    else:
+        st.success("No active operational alerts.")
+
+with col8:
+    st.subheader("System Health")
+
+    if health["status"] == "ok":
+        st.success("System Healthy")
+    else:
+        st.warning("System Warning")
+
+    st.json(health)
+
+st.divider()
+
+st.caption(
+    "Store Intelligence Platform | CCTV Event Analytics | FastAPI | Streamlit | Docker"
+)
