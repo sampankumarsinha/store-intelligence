@@ -69,7 +69,6 @@ Manual review of CCTV footage identified:
 
 Zone mapping is rule-based rather than generated from an official layout.
 
----
 
 ## Why Enriched Events?
 
@@ -161,3 +160,26 @@ The architecture is designed to support expansion from a single store to dozens 
 * Real-time streaming analytics.
 * Predictive conversion forecasting.
 * Customer journey reconstruction across cameras.
+
+## Handling Real CCTV Edge Cases
+
+### Group Entry
+
+Multiple customers entering together are handled using person-level YOLO detections instead of treating the group as a single entity. Each detected person receives an individual tracking ID, allowing visitor metrics to count individuals.
+
+### Staff Movement
+
+Staff-only movement is reduced through camera-zone mapping. Warehouse/staff camera feeds are separated from customer-facing zones. In production, this can be improved using staff identification models or registered employee embeddings.
+
+### Re-entry Handling
+
+The current system maintains visitor continuity using tracking IDs during video processing. Long-term re-entry across different time windows can be improved using person re-identification models.
+
+### Partial Occlusion
+
+YOLOv8 provides confidence-based detection for partially visible customers. The pipeline is designed to degrade gracefully instead of failing when detections are uncertain.
+
+### Billing Queue Build-up
+
+Billing counter cameras generate queue-related events. These are converted into operational alerts when abnormal queue patterns are detected.
+
