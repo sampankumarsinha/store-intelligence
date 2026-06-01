@@ -184,6 +184,17 @@ This implementation satisfies:
 * Streamlit dashboard
 * Production-readiness considerations
 
+
+## The deployed Streamlit Cloud dashboard is used for analytics visualization and API monitoring.
+
+* The full CCTV video processing workflow runs locally through dashboard.py because it uses YOLOv8 and OpenCV for video inference.
+
+* To run the complete local demo:
+
+* docker compose up --build
+streamlit run dashboard.py
+
+
 ## Quick Start
 
 ### 1. Start the API
