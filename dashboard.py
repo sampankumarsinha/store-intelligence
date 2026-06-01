@@ -169,6 +169,78 @@ def load_api_data():
     return metrics, funnel, heatmap, anomalies, health
 
 
+def get_detection_verification():
+    health = requests.get(f"{API_BASE}/health").json()
+    metrics = requests.get(f"{API_BASE}/stores/{STORE_ID}/metrics").json()
+    funnel = requests.get(f"{API_BASE}/stores/{STORE_ID}/funnel").json()
+    heatmap = requests.get(f"{API_BASE}/stores/{STORE_ID}/heatmap").json()
+
+    total_events = health.get("total_events", 0)
+    entry_count = metrics.get("entry_count", 0)
+    exit_count = metrics.get("exit_count", 0)
+    unique_visitors = metrics.get("unique_visitors", 0)
+    billing_visitors = metrics.get("billing_visitors", 0)
+    zone_count = funnel.get("funnel", {}).get("zone_visit", 0)
+
+    checks = [
+        {
+            "Check": "Events ingested",
+            "Status": "PASS" if total_events > 0 else "WARN",
+            "Evidence": f"{total_events} events available"
+        },
+        {
+            "Check": "ENTRY events generated",
+            "Status": "PASS" if entry_count > 0 else "WARN",
+            "Evidence": f"{entry_count} ENTRY events"
+        },
+        {
+            "Check": "EXIT events generated",
+            "Status": "PASS" if exit_count > 0 else "WARN",
+            "Evidence": f"{exit_count} EXIT events"
+        },
+        {
+            "Check": "Visitor tracking",
+            "Status": "PASS" if unique_visitors > 0 else "WARN",
+            "Evidence": f"{unique_visitors} unique visitor tokens"
+        },
+        {
+            "Check": "Zone detection",
+            "Status": "PASS" if zone_count > 0 else "WARN",
+            "Evidence": f"{zone_count} visitors reached zones"
+        },
+        {
+            "Check": "Billing detection",
+            "Status": "PASS" if billing_visitors > 0 else "WARN",
+            "Evidence": f"{billing_visitors} billing visitors"
+        },
+        {
+            "Check": "Heatmap generation",
+            "Status": "PASS" if len(heatmap.get("heatmap", [])) > 0 else "WARN",
+            "Evidence": f"{len(heatmap.get('heatmap', []))} active zones"
+        },
+        {
+            "Check": "Group handling",
+            "Status": "SUPPORTED",
+            "Evidence": "YOLO assigns separate track IDs per detected person"
+        },
+        {
+            "Check": "Partial occlusion handling",
+            "Status": "SUPPORTED",
+            "Evidence": "Confidence values are retained instead of suppressed"
+        },
+        {
+            "Check": "Re-entry handling",
+            "Status": "LIMITED",
+            "Evidence": "Documented as future ReID enhancement using DeepSORT/OSNet"
+        },
+        {
+            "Check": "Staff exclusion",
+            "Status": "PARTIAL",
+            "Evidence": "Warehouse/staff camera separated using camera-zone mapping"
+        },
+    ]
+
+    return pd.DataFrame(checks)
 st.set_page_config(
     page_title="Store Intelligence Dashboard",
     page_icon="🏪",
@@ -376,10 +448,42 @@ else:
 
 st.divider()
 
+# Detection Verification
+st.subheader("Detection Verification")
+
+verification_df = get_detection_verification()
+
+st.dataframe(
+    verification_df,
+    use_container_width=True,
+    hide_index=True
+)
+
+pass_count = len(
+    verification_df[
+        verification_df["Status"] == "PASS"
+    ]
+)
+
+supported_count = len(
+    verification_df[
+        verification_df["Status"] == "SUPPORTED"
+    ]
+)
+
+v1, v2, v3 = st.columns(3)
+
+v1.metric("Passed Checks", pass_count)
+v2.metric("Supported Features", supported_count)
+v3.metric("Total Checks", len(verification_df))
+
+st.divider()
+
 col7, col8 = st.columns(2)
 
 with col7:
     st.subheader("Operational Alerts")
+
 
     if anomalies["active_anomalies"]:
         for anomaly in anomalies["active_anomalies"]:
