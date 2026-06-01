@@ -147,7 +147,7 @@ For multi-store deployment:
 4. Containerized deployment.
 5. Horizontal API scaling.
 
-The architecture is designed to support expansion from a single store to dozens of stores with minimal changes.
+The architecture is designed to support expansion from a single store to 40 stores with minimal changes.
 
 ---
 
