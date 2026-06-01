@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from ultralytics import YOLO
 
-API_BASE = "http://127.0.0.1:8000"
+API_BASE = "https://store-intelligence-api-hl9i.onrender.com"
 STORE_ID = "STORE_001"
 
 ENTRY_LINE_Y = 500
