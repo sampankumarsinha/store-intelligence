@@ -346,3 +346,8 @@ def anomalies(store_id: str):
         "store_id": store_id,
         "active_anomalies": active
     }
+@app.post("/reset")
+def reset_events():
+    EVENTS.clear()
+    LAST_EVENT_TIME.clear()
+    return {"status": "cleared"}
