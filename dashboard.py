@@ -1,11 +1,6 @@
 import streamlit as st
 import requests
 import pandas as pd
-import tempfile
-import cv2
-import uuid
-from datetime import datetime, timezone, timedelta
-from ultralytics import YOLO
 
 API_BASE = "https://store-intelligence-api-hl9i.onrender.com"
 STORE_ID = "STORE_001"
