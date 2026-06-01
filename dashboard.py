@@ -224,44 +224,12 @@ camera_choice = st.selectbox(
 st.info("Important: Select CAM_1 for CAM 1.mp4, CAM_2 for CAM 2.mp4, CAM_3 for entry/exit video, and CAM_5 for billing video.")
 
 if uploaded_file is not None:
-    video_bytes = uploaded_file.getvalue()
-    st.video(video_bytes)
+    st.video(uploaded_file)
 
-    if st.button("Process Video and Send Events"):
-        selected_camera = CAMERA_MAP[camera_choice]
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-            temp_file.write(video_bytes)
-            temp_video_path = temp_file.name
-
-        with st.spinner("Running YOLOv8 detection..."):
-            generated_events = process_uploaded_video(temp_video_path, selected_camera)
-
-        st.success(f"Generated {len(generated_events)} events")
-
-        if generated_events:
-            response = requests.post(
-                f"{API_BASE}/events/ingest",
-                json=generated_events
-            )
-
-            st.write("API Response")
-            st.json(response.json())
-
-            metrics, funnel, heatmap, anomalies, health = load_api_data()
-
-            st.subheader("Updated Metrics")
-            a, b, c, d, e = st.columns(5)
-            a.metric("Visitors", metrics["unique_visitors"])
-            b.metric("Entries", metrics["entry_count"])
-            c.metric("Billing Visitors", metrics["billing_visitors"])
-            d.metric("Conversion Rate", f'{metrics["conversion_rate"]}%')
-            e.metric("Queue Depth", metrics["current_queue_depth"])
-
-            st.info("Processing complete. Charts below are now updated.")
-        else:
-            st.warning("No events were generated from this video.")
-
+    st.info(
+        "Video preview is available in the cloud demo. "
+        "YOLO-based video processing is available in the local version using dashboard_upload.py."
+    )
 
 st.divider()
 
