@@ -1,9 +1,177 @@
 import streamlit as st
 import requests
 import pandas as pd
+import tempfile
+import cv2
+import uuid
+from datetime import datetime, timezone, timedelta
+from ultralytics import YOLO
 
 API_BASE = "http://127.0.0.1:8000"
 STORE_ID = "STORE_001"
+
+ENTRY_LINE_Y = 500
+PROCESS_EVERY_N_FRAMES = 10
+
+CAMERA_MAP = {
+    "CAM_3 - Entry / Exit": "CAM_3",
+    "CAM_1 - Cosmetics Zone A": "CAM_1",
+    "CAM_2 - Cosmetics Zone B": "CAM_2",
+    "CAM_5 - Billing Counter": "CAM_5",
+}
+
+ZONE_MAP = {
+    "CAM_1": "COSMETICS_A",
+    "CAM_2": "COSMETICS_B",
+    "CAM_5": "BILLING",
+}
+
+
+def make_event(camera_id, visitor_id, event_type, timestamp, confidence, track_id, zone_id=None, dwell_ms=0, queue_depth=None):
+    return {
+        "event_id": str(uuid.uuid4()),
+        "store_id": STORE_ID,
+        "camera_id": camera_id,
+        "visitor_id": visitor_id,
+        "event_type": event_type,
+        "timestamp": timestamp.isoformat(),
+        "zone_id": zone_id,
+        "dwell_ms": dwell_ms,
+        "is_staff": False,
+        "confidence": float(confidence),
+        "metadata": {
+            "track_id": int(track_id),
+            "line_y": ENTRY_LINE_Y if camera_id == "CAM_3" else None,
+            "queue_depth": queue_depth,
+            "session_seq": 1,
+            "source": "dashboard_upload"
+        },
+    }
+
+
+def process_uploaded_video(video_path, camera_id):
+    model = YOLO("yolov8n.pt")
+    cap = cv2.VideoCapture(video_path)
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 15
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+
+    frame_no = 0
+    previous_positions = {}
+    completed_tracks = set()
+    events = []
+    base_time = datetime.now(timezone.utc)
+
+    progress = st.progress(0)
+    status = st.empty()
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        frame_no += 1
+
+        if frame_no % PROCESS_EVERY_N_FRAMES != 0:
+            continue
+
+        progress.progress(min(frame_no / total_frames, 1.0))
+        status.write(f"Processing frame {frame_no}/{total_frames}")
+
+        results = model.track(frame, persist=True, classes=[0], verbose=False)
+
+        if results[0].boxes.id is None:
+            continue
+
+        boxes = results[0].boxes.xyxy.cpu().numpy()
+        track_ids = results[0].boxes.id.cpu().numpy()
+        confidences = results[0].boxes.conf.cpu().numpy()
+
+        timestamp = base_time + timedelta(seconds=frame_no / fps)
+
+        for box, track_id, conf in zip(boxes, track_ids, confidences):
+            _, y1, _, y2 = box
+            center_y = int((y1 + y2) / 2)
+            track_id = int(track_id)
+            visitor_id = f"UPLOAD_{camera_id}_{track_id:03d}"
+
+            if camera_id == "CAM_3":
+                if track_id in previous_positions and track_id not in completed_tracks:
+                    prev_y = previous_positions[track_id]
+
+                    if prev_y < ENTRY_LINE_Y and center_y >= ENTRY_LINE_Y:
+                        events.append(make_event(camera_id, visitor_id, "ENTRY", timestamp, conf, track_id))
+                        completed_tracks.add(track_id)
+
+                    elif prev_y > ENTRY_LINE_Y and center_y <= ENTRY_LINE_Y:
+                        events.append(make_event(camera_id, visitor_id, "EXIT", timestamp, conf, track_id))
+                        completed_tracks.add(track_id)
+
+            elif camera_id in ["CAM_1", "CAM_2"]:
+                if track_id not in completed_tracks:
+                    zone_id = ZONE_MAP[camera_id]
+
+                    events.append(make_event(
+                        camera_id, visitor_id, "ZONE_ENTER",
+                        timestamp, conf, track_id,
+                        zone_id=zone_id,
+                        dwell_ms=0
+                    ))
+
+                    events.append(make_event(
+                        camera_id, visitor_id, "ZONE_DWELL",
+                        timestamp + timedelta(seconds=30),
+                        conf, track_id,
+                        zone_id=zone_id,
+                        dwell_ms=30000
+                    ))
+
+                    completed_tracks.add(track_id)
+
+            elif camera_id == "CAM_5":
+                if track_id not in completed_tracks:
+                    zone_id = "BILLING"
+
+                    events.append(make_event(
+                        camera_id, visitor_id, "ZONE_ENTER",
+                        timestamp, conf, track_id,
+                        zone_id=zone_id,
+                        dwell_ms=0
+                    ))
+
+                    events.append(make_event(
+                        camera_id, visitor_id, "BILLING_QUEUE_JOIN",
+                        timestamp, conf, track_id,
+                        zone_id=zone_id,
+                        dwell_ms=0,
+                        queue_depth=1
+                    ))
+
+                    events.append(make_event(
+                        camera_id, visitor_id, "ZONE_DWELL",
+                        timestamp + timedelta(seconds=30),
+                        conf, track_id,
+                        zone_id=zone_id,
+                        dwell_ms=30000
+                    ))
+
+                    completed_tracks.add(track_id)
+
+            previous_positions[track_id] = center_y
+
+    cap.release()
+    progress.progress(1.0)
+    status.write("Processing complete")
+    return events
+
+
+def load_api_data():
+    metrics = requests.get(f"{API_BASE}/stores/{STORE_ID}/metrics").json()
+    funnel = requests.get(f"{API_BASE}/stores/{STORE_ID}/funnel").json()
+    heatmap = requests.get(f"{API_BASE}/stores/{STORE_ID}/heatmap").json()
+    anomalies = requests.get(f"{API_BASE}/stores/{STORE_ID}/anomalies").json()
+    health = requests.get(f"{API_BASE}/health").json()
+    return metrics, funnel, heatmap, anomalies, health
 
 
 st.set_page_config(
@@ -11,48 +179,17 @@ st.set_page_config(
     page_icon="🏪",
     layout="wide"
 )
+
 st.markdown("""
 <style>
-
-.block-container{
+.block-container {
     padding-top: 2rem;
     padding-bottom: 2rem;
 }
-
-.metric-box{
-    background: linear-gradient(135deg,#1f2937,#111827);
-    padding:18px;
-    border-radius:16px;
-    border:1px solid #374151;
-    text-align:center;
-}
-
-.insight-box{
-    background:#111827;
-    padding:18px;
-    border-radius:16px;
-    border:1px solid #263244;
-    margin-bottom:15px;
-}
-
-.alert-box{
-    background:#2b1619;
-    padding:18px;
-    border-radius:14px;
-    border-left:5px solid #ef4444;
-    margin-bottom:12px;
-}
-
-.section-title{
-    margin-top:20px;
-    margin-bottom:15px;
-}
-
-.small-text{
+.small-text {
     color:#9CA3AF;
     font-size:14px;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -65,34 +202,85 @@ visitor journey tracking, zone engagement analysis,
 billing activity monitoring, and operational alerts.
 </div>
 """, unsafe_allow_html=True)
-if st.button("🔄 Refresh Dashboard"):
+
+if st.button("Refresh Dashboard"):
     st.rerun()
 
 try:
-    metrics = requests.get(f"{API_BASE}/stores/{STORE_ID}/metrics").json()
-    funnel = requests.get(f"{API_BASE}/stores/{STORE_ID}/funnel").json()
-    heatmap = requests.get(f"{API_BASE}/stores/{STORE_ID}/heatmap").json()
-    anomalies = requests.get(f"{API_BASE}/stores/{STORE_ID}/anomalies").json()
-    health = requests.get(f"{API_BASE}/health").json()
+    metrics, funnel, heatmap, anomalies, health = load_api_data()
 except Exception:
-    st.error("API is not reachable. Start FastAPI first using uvicorn or docker compose.")
+    st.error("API is not reachable. Start FastAPI first using docker compose up --build.")
     st.stop()
+
+
+st.divider()
+st.subheader("Upload CCTV Clip for Live Processing")
+
+uploaded_file = st.file_uploader(
+    "Upload a CCTV video",
+    type=["mp4", "avi", "mov"]
+)
+
+camera_choice = st.selectbox(
+    "Select correct camera mapping",
+    list(CAMERA_MAP.keys())
+)
+
+st.info("Important: Select CAM_1 for CAM 1.mp4, CAM_2 for CAM 2.mp4, CAM_3 for entry/exit video, and CAM_5 for billing video.")
+
+if uploaded_file is not None:
+    video_bytes = uploaded_file.getvalue()
+    st.video(video_bytes)
+
+    if st.button("Process Video and Send Events"):
+        selected_camera = CAMERA_MAP[camera_choice]
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+            temp_file.write(video_bytes)
+            temp_video_path = temp_file.name
+
+        with st.spinner("Running YOLOv8 detection..."):
+            generated_events = process_uploaded_video(temp_video_path, selected_camera)
+
+        st.success(f"Generated {len(generated_events)} events")
+
+        if generated_events:
+            response = requests.post(
+                f"{API_BASE}/events/ingest",
+                json=generated_events
+            )
+
+            st.write("API Response")
+            st.json(response.json())
+
+            metrics, funnel, heatmap, anomalies, health = load_api_data()
+
+            st.subheader("Updated Metrics")
+            a, b, c, d, e = st.columns(5)
+            a.metric("Visitors", metrics["unique_visitors"])
+            b.metric("Entries", metrics["entry_count"])
+            c.metric("Billing Visitors", metrics["billing_visitors"])
+            d.metric("Conversion Rate", f'{metrics["conversion_rate"]}%')
+            e.metric("Queue Depth", metrics["current_queue_depth"])
+
+            st.info("Processing complete. Charts below are now updated.")
+        else:
+            st.warning("No events were generated from this video.")
+
 
 st.divider()
 
-# KPI CARDS
 col1, col2, col3, col4, col5 = st.columns(5)
 
 col1.metric("Visitors", metrics["unique_visitors"])
-col2.metric(" Entries", metrics["entry_count"])
-col3.metric(" Billing Visitors", metrics["billing_visitors"])
-col4.metric(" Conversion Rate", f'{metrics["conversion_rate"]}%')
-col5.metric(" Queue Depth", metrics["current_queue_depth"])
+col2.metric("Entries", metrics["entry_count"])
+col3.metric("Billing Visitors", metrics["billing_visitors"])
+col4.metric("Conversion Rate", f'{metrics["conversion_rate"]}%')
+col5.metric("Queue Depth", metrics["current_queue_depth"])
 
 st.divider()
 
-# BUSINESS INSIGHTS
-st.subheader("📊 Business Insights")
+st.subheader("Business Insights")
 
 insight_col1, insight_col2, insight_col3 = st.columns(3)
 
@@ -103,15 +291,11 @@ with insight_col1:
             "Visitors are engaging but checkout completion needs attention."
         )
     else:
-        st.success(
-            f"Conversion is healthy at {metrics['conversion_rate']}%."
-        )
+        st.success(f"Conversion is healthy at {metrics['conversion_rate']}%.")
 
 with insight_col2:
     if metrics["billing_visitors"] > 0:
-        st.success(
-            f"{metrics['billing_visitors']} visitors reached the billing zone."
-        )
+        st.success(f"{metrics['billing_visitors']} visitors reached the billing zone.")
     else:
         st.info("No billing-zone visitors detected yet.")
 
@@ -123,11 +307,10 @@ with insight_col3:
 
 st.divider()
 
-# FUNNEL + HEATMAP
 left, right = st.columns(2)
 
 with left:
-    st.subheader("📉 Conversion Funnel")
+    st.subheader("Conversion Funnel")
 
     funnel_df = pd.DataFrame([
         {"Stage": "Entry", "Count": funnel["funnel"]["entry"]},
@@ -145,7 +328,7 @@ with left:
     )
 
 with right:
-    st.subheader("🔥 Zone Heatmap")
+    st.subheader("Zone Heatmap")
 
     heatmap_df = pd.DataFrame(heatmap["heatmap"])
 
@@ -162,22 +345,14 @@ with right:
             ["zone_id", "visit_frequency", "avg_dwell_sec", "normalized_score", "data_confidence"]
         ]
 
-        st.dataframe(
-            heatmap_display,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.bar_chart(
-            heatmap_display.set_index("zone_id")["normalized_score"]
-        )
+        st.dataframe(heatmap_display, use_container_width=True, hide_index=True)
+        st.bar_chart(heatmap_display.set_index("zone_id")["normalized_score"])
     else:
         st.info("No heatmap data available yet.")
 
 st.divider()
 
-# STORE LAYOUT
-st.subheader("🗺️ Store Layout Intelligence")
+st.subheader("Store Layout Intelligence")
 
 layout_col1, layout_col2, layout_col3 = st.columns(3)
 
@@ -185,6 +360,7 @@ zone_lookup = {}
 if not heatmap_df.empty:
     for _, row in heatmap_df.iterrows():
         zone_lookup[row["zone_id"]] = row
+
 
 def zone_card(zone_name, title):
     data = zone_lookup.get(zone_name)
@@ -205,19 +381,19 @@ def zone_card(zone_name, title):
     else:
         st.info(f"No data available for {title}")
 
+
 with layout_col1:
-    zone_card("COSMETICS_A", "💄 Cosmetics Zone A")
+    zone_card("COSMETICS_A", "Cosmetics Zone A")
 
 with layout_col2:
-    zone_card("COSMETICS_B", "🧴 Cosmetics Zone B")
+    zone_card("COSMETICS_B", "Cosmetics Zone B")
 
 with layout_col3:
-    zone_card("BILLING", "🧾 Billing Counter")
+    zone_card("BILLING", "Billing Counter")
 
 st.divider()
 
-# DWELL TIME
-st.subheader("⏱ Average Dwell Time Per Zone")
+st.subheader("Average Dwell Time Per Zone")
 
 dwell_data = metrics.get("avg_dwell_per_zone", {})
 
@@ -237,16 +413,13 @@ else:
 
 st.divider()
 
-# ANOMALIES + HEALTH
 col7, col8 = st.columns(2)
 
 with col7:
     st.subheader("Operational Alerts")
 
     if anomalies["active_anomalies"]:
-
         for anomaly in anomalies["active_anomalies"]:
-
             title = anomaly["type"].replace("_", " ").title()
             severity = anomaly["severity"]
             action = anomaly["suggested_action"]
@@ -261,17 +434,11 @@ with col7:
                 border-left:5px solid {color};
                 margin-bottom:12px;
             ">
-
             <h4 style="margin-bottom:10px;">{title}</h4>
-
             <p><b>Severity:</b> {severity}</p>
-
-            <p><b>Recommended Action:</b><br>
-            {action}</p>
-
+            <p><b>Recommended Action:</b><br>{action}</p>
             </div>
             """, unsafe_allow_html=True)
-
     else:
         st.success("No active operational alerts.")
 

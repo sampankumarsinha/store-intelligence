@@ -179,6 +179,8 @@ def get_metrics(store_id: str):
     }
 
 
+
+    
 @app.get("/stores/{store_id}/funnel")
 def funnel(store_id: str):
     store_events = [
@@ -202,15 +204,17 @@ def funnel(store_id: str):
         if e.get("zone_id") == "BILLING":
             billing.add(visitor_id)
 
+    # Funnel should represent the reconstructed customer journey.
+    # Some visitors are first detected in product/billing cameras,
+    # so we include them in entry base to avoid missing camera-overlap journeys.
     entry_base = entered | zone_visit | billing
 
     zone_visit = zone_visit & entry_base
-    billing = billing & zone_visit
+    billing = billing & entry_base
 
     entry_count = len(entry_base)
     zone_count = len(zone_visit)
     billing_count = len(billing)
-
     purchase_count = billing_count
 
     return {
@@ -222,13 +226,20 @@ def funnel(store_id: str):
             "purchase": purchase_count
         },
         "dropoff_percent": {
-            "entry_to_zone": round((1 - zone_count / max(entry_count, 1)) * 100, 2),
-            "zone_to_billing": round((1 - billing_count / max(zone_count, 1)) * 100, 2),
-            "billing_to_purchase": round((1 - purchase_count / max(billing_count, 1)) * 100, 2)
+            "entry_to_zone": round(
+                (1 - zone_count / max(entry_count, 1)) * 100,
+                2
+            ),
+            "zone_to_billing": round(
+                (1 - billing_count / max(zone_count, 1)) * 100,
+                2
+            ),
+            "billing_to_purchase": round(
+                (1 - purchase_count / max(billing_count, 1)) * 100,
+                2
+            )
         }
     }
-
-
 @app.get("/stores/{store_id}/heatmap")
 def heatmap(store_id: str):
     store_events = [
