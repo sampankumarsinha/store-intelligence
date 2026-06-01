@@ -1,6 +1,11 @@
 import streamlit as st
 import requests
 import pandas as pd
+import tempfile
+import cv2
+import uuid
+from datetime import datetime, timezone, timedelta
+from ultralytics import YOLO
 
 API_BASE = "https://store-intelligence-api-hl9i.onrender.com"
 STORE_ID = "STORE_001"
@@ -22,7 +27,17 @@ ZONE_MAP = {
 }
 
 
-def make_event(camera_id, visitor_id, event_type, timestamp, confidence, track_id, zone_id=None, dwell_ms=0, queue_depth=None):
+def make_event(
+    camera_id,
+    visitor_id,
+    event_type,
+    timestamp,
+    confidence,
+    track_id,
+    zone_id=None,
+    dwell_ms=0,
+    queue_depth=None,
+):
     return {
         "event_id": str(uuid.uuid4()),
         "store_id": STORE_ID,
@@ -39,7 +54,7 @@ def make_event(camera_id, visitor_id, event_type, timestamp, confidence, track_i
             "line_y": ENTRY_LINE_Y if camera_id == "CAM_3" else None,
             "queue_depth": queue_depth,
             "session_seq": 1,
-            "source": "dashboard_upload"
+            "source": "dashboard_upload",
         },
     }
 
@@ -95,31 +110,60 @@ def process_uploaded_video(video_path, camera_id):
                     prev_y = previous_positions[track_id]
 
                     if prev_y < ENTRY_LINE_Y and center_y >= ENTRY_LINE_Y:
-                        events.append(make_event(camera_id, visitor_id, "ENTRY", timestamp, conf, track_id))
+                        events.append(
+                            make_event(
+                                camera_id,
+                                visitor_id,
+                                "ENTRY",
+                                timestamp,
+                                conf,
+                                track_id,
+                            )
+                        )
                         completed_tracks.add(track_id)
 
                     elif prev_y > ENTRY_LINE_Y and center_y <= ENTRY_LINE_Y:
-                        events.append(make_event(camera_id, visitor_id, "EXIT", timestamp, conf, track_id))
+                        events.append(
+                            make_event(
+                                camera_id,
+                                visitor_id,
+                                "EXIT",
+                                timestamp,
+                                conf,
+                                track_id,
+                            )
+                        )
                         completed_tracks.add(track_id)
 
             elif camera_id in ["CAM_1", "CAM_2"]:
                 if track_id not in completed_tracks:
                     zone_id = ZONE_MAP[camera_id]
 
-                    events.append(make_event(
-                        camera_id, visitor_id, "ZONE_ENTER",
-                        timestamp, conf, track_id,
-                        zone_id=zone_id,
-                        dwell_ms=0
-                    ))
+                    events.append(
+                        make_event(
+                            camera_id,
+                            visitor_id,
+                            "ZONE_ENTER",
+                            timestamp,
+                            conf,
+                            track_id,
+                            zone_id=zone_id,
+                            dwell_ms=0,
+                        )
+                    )
 
-                    events.append(make_event(
-                        camera_id, visitor_id, "ZONE_DWELL",
-                        timestamp + timedelta(seconds=30),
-                        conf, track_id,
-                        zone_id=zone_id,
-                        dwell_ms=30000
-                    ))
+                    events.append(
+                        make_event(
+                            camera_id,
+                            visitor_id,
+                            "ZONE_DWELL",
+                            timestamp + timedelta(seconds=30),
+                            conf,
+                            track_id,
+                            zone_id=zone_id,
+                            dwell_ms=30000,
+                        )
+                    )
 
                     completed_tracks.add(track_id)
 
@@ -127,28 +171,45 @@ def process_uploaded_video(video_path, camera_id):
                 if track_id not in completed_tracks:
                     zone_id = "BILLING"
 
-                    events.append(make_event(
-                        camera_id, visitor_id, "ZONE_ENTER",
-                        timestamp, conf, track_id,
-                        zone_id=zone_id,
-                        dwell_ms=0
-                    ))
+                    events.append(
+                        make_event(
+                            camera_id,
+                            visitor_id,
+                            "ZONE_ENTER",
+                            timestamp,
+                            conf,
+                            track_id,
+                            zone_id=zone_id,
+                            dwell_ms=0,
+                        )
+                    )
 
-                    events.append(make_event(
-                        camera_id, visitor_id, "BILLING_QUEUE_JOIN",
-                        timestamp, conf, track_id,
-                        zone_id=zone_id,
-                        dwell_ms=0,
-                        queue_depth=1
-                    ))
+                    events.append(
+                        make_event(
+                            camera_id,
+                            visitor_id,
+                            "BILLING_QUEUE_JOIN",
+                            timestamp,
+                            conf,
+                            track_id,
+                            zone_id=zone_id,
+                            dwell_ms=0,
+                            queue_depth=1,
+                        )
+                    )
 
-                    events.append(make_event(
-                        camera_id, visitor_id, "ZONE_DWELL",
-                        timestamp + timedelta(seconds=30),
-                        conf, track_id,
-                        zone_id=zone_id,
-                        dwell_ms=30000
-                    ))
+                    events.append(
+                        make_event(
+                            camera_id,
+                            visitor_id,
+                            "ZONE_DWELL",
+                            timestamp + timedelta(seconds=30),
+                            conf,
+                            track_id,
+                            zone_id=zone_id,
+                            dwell_ms=30000,
+                        )
+                    )
 
                     completed_tracks.add(track_id)
 
@@ -186,68 +247,71 @@ def get_detection_verification():
         {
             "Check": "Events ingested",
             "Status": "PASS" if total_events > 0 else "WARN",
-            "Evidence": f"{total_events} events available"
+            "Evidence": f"{total_events} events available",
         },
         {
             "Check": "ENTRY events generated",
             "Status": "PASS" if entry_count > 0 else "WARN",
-            "Evidence": f"{entry_count} ENTRY events"
+            "Evidence": f"{entry_count} ENTRY events",
         },
         {
             "Check": "EXIT events generated",
             "Status": "PASS" if exit_count > 0 else "WARN",
-            "Evidence": f"{exit_count} EXIT events"
+            "Evidence": f"{exit_count} EXIT events",
         },
         {
             "Check": "Visitor tracking",
             "Status": "PASS" if unique_visitors > 0 else "WARN",
-            "Evidence": f"{unique_visitors} unique visitor tokens"
+            "Evidence": f"{unique_visitors} unique visitor tokens",
         },
         {
             "Check": "Zone detection",
             "Status": "PASS" if zone_count > 0 else "WARN",
-            "Evidence": f"{zone_count} visitors reached zones"
+            "Evidence": f"{zone_count} visitors reached zones",
         },
         {
             "Check": "Billing detection",
             "Status": "PASS" if billing_visitors > 0 else "WARN",
-            "Evidence": f"{billing_visitors} billing visitors"
+            "Evidence": f"{billing_visitors} billing visitors",
         },
         {
             "Check": "Heatmap generation",
             "Status": "PASS" if len(heatmap.get("heatmap", [])) > 0 else "WARN",
-            "Evidence": f"{len(heatmap.get('heatmap', []))} active zones"
+            "Evidence": f"{len(heatmap.get('heatmap', []))} active zones",
         },
         {
             "Check": "Group handling",
             "Status": "SUPPORTED",
-            "Evidence": "YOLO assigns separate track IDs per detected person"
+            "Evidence": "YOLO assigns separate track IDs per detected person",
         },
         {
             "Check": "Partial occlusion handling",
             "Status": "SUPPORTED",
-            "Evidence": "Confidence values are retained instead of suppressed"
+            "Evidence": "Confidence values are retained instead of suppressed",
         },
         {
             "Check": "Re-entry handling",
             "Status": "LIMITED",
-            "Evidence": "Documented as future ReID enhancement using DeepSORT/OSNet"
+            "Evidence": "Documented as future ReID enhancement using DeepSORT/OSNet",
         },
         {
             "Check": "Staff exclusion",
             "Status": "PARTIAL",
-            "Evidence": "Warehouse/staff camera separated using camera-zone mapping"
+            "Evidence": "Warehouse/staff camera separated using camera-zone mapping",
         },
     ]
 
     return pd.DataFrame(checks)
+
+
 st.set_page_config(
     page_title="Store Intelligence Dashboard",
     page_icon="🏪",
-    layout="wide"
+    layout="wide",
 )
 
-st.markdown("""
+st.markdown(
+    """
 <style>
 .block-container {
     padding-top: 2rem;
@@ -258,9 +322,12 @@ st.markdown("""
     font-size:14px;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-st.markdown("""
+st.markdown(
+    """
 # Store Intelligence Dashboard
 
 <div class="small-text">
@@ -268,7 +335,9 @@ Real-time retail analytics generated from CCTV event processing,
 visitor journey tracking, zone engagement analysis,
 billing activity monitoring, and operational alerts.
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 if st.button("Refresh Dashboard"):
     st.rerun()
@@ -279,29 +348,65 @@ except Exception:
     st.error("API is not reachable. Start FastAPI first using docker compose up --build.")
     st.stop()
 
-
 st.divider()
 st.subheader("Upload CCTV Clip for Live Processing")
 
 uploaded_file = st.file_uploader(
     "Upload a CCTV video",
-    type=["mp4", "avi", "mov"]
+    type=["mp4", "avi", "mov"],
 )
 
 camera_choice = st.selectbox(
     "Select correct camera mapping",
-    list(CAMERA_MAP.keys())
+    list(CAMERA_MAP.keys()),
 )
 
-st.info("Important: Select CAM_1 for CAM 1.mp4, CAM_2 for CAM 2.mp4, CAM_3 for entry/exit video, and CAM_5 for billing video.")
+st.info(
+    "Important: Select CAM_1 for CAM 1.mp4, CAM_2 for CAM 2.mp4, "
+    "CAM_3 for entry/exit video, and CAM_5 for billing video."
+)
 
 if uploaded_file is not None:
     st.video(uploaded_file)
 
-    st.info(
-        "Video preview is available in the cloud demo. "
-        "YOLO-based video processing is available in the local version using dashboard_upload.py."
-    )
+    if st.button("Process Video and Send Events"):
+        selected_camera = CAMERA_MAP[camera_choice]
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+            temp_file.write(uploaded_file.getvalue())
+            temp_video_path = temp_file.name
+
+        with st.spinner("Running YOLOv8 detection..."):
+            generated_events = process_uploaded_video(
+                temp_video_path,
+                selected_camera,
+            )
+
+        st.success(f"Generated {len(generated_events)} events")
+
+        if generated_events:
+            response = requests.post(
+                f"{API_BASE}/events/ingest",
+                json=generated_events,
+            )
+
+            st.write("API Response")
+            st.json(response.json())
+
+            metrics, funnel, heatmap, anomalies, health = load_api_data()
+
+            st.subheader("Updated Metrics")
+
+            a, b, c, d, e = st.columns(5)
+            a.metric("Visitors", metrics["unique_visitors"])
+            b.metric("Entries", metrics["entry_count"])
+            c.metric("Billing Visitors", metrics["billing_visitors"])
+            d.metric("Conversion Rate", f'{metrics["conversion_rate"]}%')
+            e.metric("Queue Depth", metrics["current_queue_depth"])
+
+            st.info("Events sent successfully. Dashboard values below are now updated.")
+        else:
+            st.warning("No events were generated from this clip.")
 
 st.divider()
 
@@ -347,12 +452,14 @@ left, right = st.columns(2)
 with left:
     st.subheader("Conversion Funnel")
 
-    funnel_df = pd.DataFrame([
-        {"Stage": "Entry", "Count": funnel["funnel"]["entry"]},
-        {"Stage": "Zone Visit", "Count": funnel["funnel"]["zone_visit"]},
-        {"Stage": "Billing Queue", "Count": funnel["funnel"]["billing_queue"]},
-        {"Stage": "Purchase", "Count": funnel["funnel"]["purchase"]}
-    ])
+    funnel_df = pd.DataFrame(
+        [
+            {"Stage": "Entry", "Count": funnel["funnel"]["entry"]},
+            {"Stage": "Zone Visit", "Count": funnel["funnel"]["zone_visit"]},
+            {"Stage": "Billing Queue", "Count": funnel["funnel"]["billing_queue"]},
+            {"Stage": "Purchase", "Count": funnel["funnel"]["purchase"]},
+        ]
+    )
 
     st.dataframe(funnel_df, use_container_width=True, hide_index=True)
     st.bar_chart(funnel_df.set_index("Stage"))
@@ -369,7 +476,13 @@ with right:
 
     if not heatmap_df.empty:
         heatmap_display = heatmap_df[
-            ["zone_id", "visit_frequency", "avg_dwell_ms", "normalized_score", "data_confidence"]
+            [
+                "zone_id",
+                "visit_frequency",
+                "avg_dwell_ms",
+                "normalized_score",
+                "data_confidence",
+            ]
         ].copy()
 
         heatmap_display["avg_dwell_sec"] = (
@@ -377,7 +490,13 @@ with right:
         ).round(2)
 
         heatmap_display = heatmap_display[
-            ["zone_id", "visit_frequency", "avg_dwell_sec", "normalized_score", "data_confidence"]
+            [
+                "zone_id",
+                "visit_frequency",
+                "avg_dwell_sec",
+                "normalized_score",
+                "data_confidence",
+            ]
         ]
 
         st.dataframe(heatmap_display, use_container_width=True, hide_index=True)
@@ -405,14 +524,16 @@ def zone_card(zone_name, title):
         dwell = round(data["avg_dwell_ms"] / 1000, 2)
         score = round(data["normalized_score"], 2)
 
-        st.markdown(f"""
+        st.markdown(
+            f"""
 ### {title}
 
 **Zone ID:** `{zone_name}`  
 **Visits:** {visits}  
 **Avg Dwell:** {dwell} sec  
 **Engagement Score:** {score}/100
-""")
+"""
+        )
     else:
         st.info(f"No data available for {title}")
 
@@ -433,13 +554,15 @@ st.subheader("Average Dwell Time Per Zone")
 dwell_data = metrics.get("avg_dwell_per_zone", {})
 
 if dwell_data:
-    dwell_df = pd.DataFrame([
-        {
-            "Zone": zone,
-            "Avg Dwell (sec)": round(dwell / 1000, 2)
-        }
-        for zone, dwell in dwell_data.items()
-    ])
+    dwell_df = pd.DataFrame(
+        [
+            {
+                "Zone": zone,
+                "Avg Dwell (sec)": round(dwell / 1000, 2),
+            }
+            for zone, dwell in dwell_data.items()
+        ]
+    )
 
     st.dataframe(dwell_df, use_container_width=True, hide_index=True)
     st.bar_chart(dwell_df.set_index("Zone"))
@@ -448,7 +571,6 @@ else:
 
 st.divider()
 
-# Detection Verification
 st.subheader("Detection Verification")
 
 verification_df = get_detection_verification()
@@ -456,20 +578,11 @@ verification_df = get_detection_verification()
 st.dataframe(
     verification_df,
     use_container_width=True,
-    hide_index=True
+    hide_index=True,
 )
 
-pass_count = len(
-    verification_df[
-        verification_df["Status"] == "PASS"
-    ]
-)
-
-supported_count = len(
-    verification_df[
-        verification_df["Status"] == "SUPPORTED"
-    ]
-)
+pass_count = len(verification_df[verification_df["Status"] == "PASS"])
+supported_count = len(verification_df[verification_df["Status"] == "SUPPORTED"])
 
 v1, v2, v3 = st.columns(3)
 
@@ -484,7 +597,6 @@ col7, col8 = st.columns(2)
 with col7:
     st.subheader("Operational Alerts")
 
-
     if anomalies["active_anomalies"]:
         for anomaly in anomalies["active_anomalies"]:
             title = anomaly["type"].replace("_", " ").title()
@@ -493,7 +605,8 @@ with col7:
 
             color = "#ef4444" if severity == "CRITICAL" else "#f59e0b"
 
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div style="
                 background:#1f2937;
                 padding:18px;
@@ -505,7 +618,9 @@ with col7:
             <p><b>Severity:</b> {severity}</p>
             <p><b>Recommended Action:</b><br>{action}</p>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
     else:
         st.success("No active operational alerts.")
 
