@@ -399,7 +399,7 @@ https://store-intelligence-api-hl9i.onrender.com
 
 ### Streamlit Dashboard
 
-<STREAMLIT_URL>
+<https://store-intelligence-ggznvvv6adiwbhjmyjlugh.streamlit.app/>
 
 ### GitHub Repository
 
@@ -430,5 +430,5 @@ https://github.com/sampankumarsinha/store-intelligence
 ✓ Automated Testing
 
 ✓ Dashboard Visualization
-
-✓ Production Scalability Discussion
+o
+✓ Production Scalability Discussin
