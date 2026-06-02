@@ -1,92 +1,118 @@
 # Engineering Choices
 
-## 1. Detection model choice
+## 1. Detection Model Choice
 
-### Options considered
-
-| Option | Pros | Cons |
-|--------|------|------|
-| YOLOv8n + Ultralytics track | Fast, easy, good person class | Needs GPU/CPU time per frame |
-| RT-DETR | Accuracy | Heavier, slower on CPU |
-| MediaPipe | Lightweight | Weaker in crowded retail scenes |
-| VLM zone/staff labelling | Flexible semantics | Cost, latency, non-deterministic |
-
-### What AI suggested
-
-Use YOLOv8 with ByteTrack and optionally a VLM to label staff uniforms and zone semantics from frames.
-
-### What I chose and why
-
-**YOLOv8n + Centroid/IoU tracker** with rule-based zones from `store_layout.json`.
-
-- Matches typical CCTV deployment (15fps, 1080p) with acceptable latency.
-- `yolov8n.pt` is small and runs on CPU for challenge clips.
-- Zone polygons and entry lines are already in layout JSON — a VLM adds little over deterministic geometry.
-- **Override:** I did not use ByteTrack as a separate dependency; Ultralytics built-in track IDs plus our CentroidTracker fallback keeps dependencies simpler while still separating group members by distinct boxes/track IDs.
-
-Staff uses a **uniform color heuristic** (dark, low-saturation upper body) rather than a VLM — documented as a known limitation in README.
-
----
-
-## 2. Event schema rationale
-
-### Design
-
-Flat JSON events with typed `event_type`, optional `zone_id`, `dwell_ms`, and rich `metadata` (queue_depth, sku_zone, session_seq, group_candidate, track_id, source).
-
-### Why this supports all API queries
-
-| API need | Schema support |
-|----------|----------------|
-| Unique visitors / funnel | `visitor_id`, ENTRY/REENTRY/EXIT |
-| Zone dwell / heatmap | ZONE_* + `dwell_ms` + `zone_id` |
-| Queue metrics | BILLING_QUEUE_* + `metadata.queue_depth` |
-| Staff exclusion | `is_staff` flag (events retained) |
-| POS conversion | BILLING zone events + timestamps |
-| Idempotent ingest | UUID `event_id` |
-| Quality audit | `confidence` always present; low conf kept |
-
-### Confidence and metadata
-
-- **Confidence** is model/detection certainty — never dropped silently; group crossings may scale down confidence.
-- **group_candidate** marks uncertain group separations for downstream review.
-- **session_seq** orders events within a visit for debugging and future session analytics.
-
----
-
-## 3. API architecture choice
-
-### Options considered
+### Options Considered
 
 | Option | Pros | Cons |
 |--------|------|------|
-| Monolith in-memory dict | Trivial | No persistence, no 503 semantics |
-| FastAPI + SQLite | Single container, SQL queries | Not horizontally scaled |
-| FastAPI + PostgreSQL + Redis | Production scale | Ops overhead for take-home |
+| YOLOv8n + Ultralytics tracking | Fast, simple, widely used, good person detection | Can lose IDs in occlusion |
+| RT-DETR | Higher detection accuracy | Heavier and slower on CPU |
+| MediaPipe | Lightweight | Weaker in crowded retail CCTV scenes |
+| VLM-based zone/staff labeling | Flexible semantic understanding | Costly, slower, non-deterministic |
+| DeepSORT / ByteTrack | Better tracking and re-identification | More dependencies and setup complexity |
 
-### What AI suggested
+### What AI Suggested
 
-PostgreSQL for events, Redis for live metrics, separate worker for aggregation.
+AI suggested using YOLOv8 with ByteTrack and optionally a vision-language model for staff recognition and zone classification.
 
-### What I chose and why
+### What I Chose
 
-**FastAPI + SQLite** with modular packages (`ingestion`, `metrics`, `funnel`, `heatmap`, `anomalies`, `health`).
+I chose **YOLOv8n with tracking and rule-based camera/zone mapping**.
 
-- Satisfies `docker compose up` acceptance gate with zero external services.
-- Idempotent ingest via PRIMARY KEY on `event_id`.
-- Daily conversion snapshots table supports 7-day anomaly baseline.
-- **Trade-off:** At 40 live stores with high event rates, SQLite write contention and single-process uvicorn would be the first bottleneck — production would move to PostgreSQL + partitioned tables + materialized metrics.
+Reasons:
 
-### Where AI was overridden
+- YOLOv8n is lightweight and works well on CPU for challenge-scale CCTV clips.
+- The model provides reliable person detection without needing a large GPU setup.
+- Camera-to-zone mapping is deterministic and easier to validate.
+- The challenge focuses on structured event generation and analytics, not just model complexity.
+- The system remains reproducible with fewer dependencies.
 
-AI suggested caching `/metrics` in Redis with TTL. I compute metrics from stored events on each request for **correctness and simpler tests**; caching would risk stale conversion during live ingest for marginal latency gain at challenge scale.
+### Trade-off
+
+This approach is fast and simple, but it may lose identity continuity during heavy occlusion, re-entry, or crowded group movement. A production version would use ByteTrack, DeepSORT, or OSNet-based re-identification.
 
 ---
 
-## Summary
+## 2. Event Schema Design Rationale
 
-| Decision | Choice |
-|----------|--------|
-| Detection | YOLOv8n + geometric zones + trajectory re-entry |
-| Events | Flat schema, staff flag, rich metadata |
-| API | FastAPI + SQLite, modular analytics |
+The event schema was designed as a flat JSON structure so that every stage of the pipeline can consume and validate events easily.
+
+Each event contains:
+
+- `event_id`
+- `store_id`
+- `camera_id`
+- `visitor_id`
+- `event_type`
+- `timestamp`
+- `zone_id`
+- `dwell_ms`
+- `is_staff`
+- `confidence`
+- `metadata`
+
+### Why This Schema Works
+
+| Requirement | Schema Field |
+|------------|--------------|
+| Unique visitor analytics | `visitor_id` |
+| Entry/exit tracking | `event_type` |
+| Zone analytics | `zone_id`, `dwell_ms` |
+| Billing queue monitoring | `BILLING_QUEUE_JOIN`, `metadata.queue_depth` |
+| Staff exclusion | `is_staff` |
+| Idempotent ingestion | `event_id` |
+| Confidence calibration | `confidence` |
+| Debugging and traceability | `metadata` |
+
+### Why I Kept Confidence Values
+
+Low-confidence detections are not silently removed. They are retained with their confidence value so that downstream analytics can decide how to handle uncertain detections.
+
+This makes the system more transparent and auditable.
+
+---
+
+## 3. API Architecture Choice
+
+### Options Considered
+
+| Option | Pros | Cons |
+|--------|------|------|
+| In-memory FastAPI | Simple and fast | No persistence |
+| FastAPI + SQLite | Lightweight persistence | Limited write scalability |
+| FastAPI + PostgreSQL | Production-ready | More setup complexity |
+| FastAPI + Kafka | Scalable streaming | Too heavy for challenge scope |
+
+### What AI Suggested
+
+AI suggested PostgreSQL for persistent event storage, Redis for caching metrics, and a separate worker service for aggregation.
+
+### What I Chose
+
+I chose **FastAPI with lightweight event ingestion and analytics computation**.
+
+Reasons:
+
+- FastAPI provides clear REST API design.
+- Docker Compose can start the API with minimal setup.
+- The project remains easy to run and evaluate.
+- Analytics can be computed directly from stored/ingested events.
+- It satisfies the challenge acceptance gate without adding unnecessary infrastructure.
+
+### Trade-off
+
+For production scale, a database and streaming layer would be required. PostgreSQL or TimescaleDB would be used for event storage, and Kafka or Redis Streams would handle high-volume event ingestion.
+
+---
+
+## 4. Dashboard Architecture
+
+The project uses two dashboard modes:
+
+### Local Dashboard
+
+File:
+
+```text
+dashboard.py

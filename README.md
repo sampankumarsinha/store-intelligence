@@ -1,163 +1,434 @@
 # Store Intelligence Platform
 
-End-to-end retail analytics for Apex Retail: raw anonymised CCTV → structured behavioural events → FastAPI intelligence layer → live dashboard.
+## Overview
 
-## Quick start (5 commands)
+Store Intelligence Platform is an end-to-end retail analytics system that converts CCTV footage into actionable business intelligence.
 
-```bash
-git clone <your-repo-url> store-intelligence && cd store-intelligence
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-docker compose up --build -d
-curl http://localhost:8000/health
+The system detects visitors, tracks movement across store zones, generates structured behavioral events, ingests those events into a FastAPI intelligence layer, and produces analytics such as:
+
+* Visitor Count
+* Entry / Exit Monitoring
+* Zone Engagement Analysis
+* Billing Queue Monitoring
+* Conversion Funnel Analytics
+* Heatmap Analytics
+* Operational Alerts
+* System Health Monitoring
+
+---
+
+## Problem Statement
+
+Retail stores generate large amounts of CCTV footage but derive limited operational insights from it.
+
+This platform transforms raw CCTV data into structured retail intelligence that can help:
+
+* Understand customer movement
+* Measure zone engagement
+* Identify bottlenecks
+* Monitor queue congestion
+* Improve conversion rates
+* Detect operational anomalies
+
+---
+
+## Architecture
+
+```text
+CCTV Video
+     ↓
+YOLOv8 Detection
+     ↓
+Multi-Object Tracking
+     ↓
+Event Generation
+     ↓
+FastAPI Intelligence Layer
+     ↓
+Metrics Engine
+     ↓
+Dashboard Visualization
 ```
 
-## Purplle-provided datasets
+---
 
-Official sample files (place in `detection/` or use as shipped):
+## Technology Stack
 
-- `detection/sample_eventsbe42122.jsonl` — Purplle CCTV events (entry/exit, zones, queue)
-- `detection/POS - sample transactionsb1e826f.csv` — Purplle POS line items
-- **Store 2 videos** (iCloud): `~/Library/Mobile Documents/com~apple~CloudDocs/Store 2/`  
-  (`entry 1.mp4`, `entry 2.mp4`, `zone.mp4`, `billing_area.mp4`, layout PNG)
+### Computer Vision
 
-Convert to the challenge API schema and import:
+* YOLOv8
+* OpenCV
 
-```bash
-source venv/bin/activate
-python scripts/import_purplle_data.py --also-sample --link-store2-videos
-python scripts/ingest_events.py data/purplle_events.jsonl
-curl http://localhost:8000/stores/ST1076/metrics
-```
+### Backend
 
-| Dataset | Store ID | Date (sample) |
-|---------|----------|----------------|
-| CCTV events | `ST1076` | 2026-03-08 |
-| POS CSV | `ST1008` | 2026-04-10 (→ `data/pos_transactions_purplle.csv`) |
+* FastAPI
+* Uvicorn
 
-POS and CCTV samples use **different stores/dates** in the Purplle pack. The API loads both `data/pos_transactions.csv` (challenge demo) and `data/pos_transactions_purplle.csv` when present.
+### Dashboard
 
-## Run detection pipeline
+* Streamlit
 
-**Replay mode** (no GPU/video required — uses `data/purplle_events.jsonl` or `data/sample_events.jsonl`):
+### Data Processing
 
-```bash
-source venv/bin/activate
-bash detection/run.sh
-# or: python -m detection.detect --mode replay
-```
+* Python
+* Pandas
 
-**Video mode** (place clips in `data/videos/` matching `store_layout.json`):
+### Deployment
 
-```bash
-export DETECTION_MODE=video
-bash detection/run.sh
-```
+* Docker
+* Docker Compose
+* Render
 
-Output: `data/events.jsonl`
+### Testing
 
-## Ingest events into API
+* Pytest
 
-```bash
-# API must be running (docker compose up)
-python scripts/ingest_events.py data/events.jsonl
-```
+---
 
-Or via curl:
+## Datasets Used
 
-```bash
-curl -X POST http://localhost:8000/events/ingest \
-  -H "Content-Type: application/json" \
-  --data-binary @data/events.jsonl
-```
+### Purplle Sample Data
 
-## API examples
+Provided datasets:
 
-```bash
-# Health
-curl http://localhost:8000/health
+* sample_eventsbe42122.jsonl
+* POS - sample transactionsb1e826f.csv
+* Store 2 CCTV Videos
 
-# Metrics
-curl http://localhost:8000/stores/STORE_001/metrics
+Used for:
 
-# Funnel
-curl http://localhost:8000/stores/STORE_001/funnel
+* Event Schema Validation
+* Funnel Analytics
+* Heatmap Analytics
+* Queue Monitoring
+* API Validation
 
-# Heatmap
-curl http://localhost:8000/stores/STORE_001/heatmap
+---
 
-# Anomalies
-curl http://localhost:8000/stores/STORE_001/anomalies
-```
+## Camera Mapping
 
-## Live dashboard
+| Camera | Purpose                |
+| ------ | ---------------------- |
+| CAM_1  | Cosmetics Zone A       |
+| CAM_2  | Cosmetics Zone B       |
+| CAM_3  | Entry / Exit           |
+| CAM_4  | Warehouse / Staff Area |
+| CAM_5  | Billing Counter        |
 
-**Docker (browser UI — recommended):**
+---
 
-```bash
-docker compose up -d api dashboard
-# Open http://localhost:8501
-```
-
-**Terminal (local venv):**
-
-```bash
-source venv/bin/activate
-export API_URL=http://localhost:8000
-export STORE_ID=STORE_001
-python dashboard/live_dashboard.py
-```
-
-The Docker dashboard is Streamlit (`dashboard_cloud.py`). The terminal dashboard uses Rich and polls the same API metrics.
-
-## Run tests
-
-```bash
-pytest tests/ --cov=app --cov-report=term-missing
-```
-
-## Acceptance checks
-
-```bash
-python assertions.py --api-url http://localhost:8000
-```
-
-Validates health, ingest, metrics, funnel, heatmap, and anomalies endpoints.
-
-## Project structure
+## Project Structure
 
 ```text
 store-intelligence/
-├── detection/          # YOLOv8 pipeline + replay fallback
-├── app/                # FastAPI + SQLite analytics
-├── dashboard/          # Live terminal dashboard
-├── tests/              # Pytest suite (>70% coverage)
-├── data/               # layout, POS, sample events, events.jsonl, store.db
-├── scripts/            # ingest helper
+
+├── app/
+├── detection/
+├── pipeline/
+├── dashboard/
+├── scripts/
+├── tests/
+
+├── dashboard.py
+├── dashboard_cloud.py
+├── verify_detection.py
+
+├── Dockerfile
+├── docker-compose.yml
+
 ├── README.md
 ├── DESIGN.md
-└── CHOICES.md
+├── CHOICES.md
 ```
 
-## Docker
+---
 
-The API image uses `requirements-api.txt` only (FastAPI + SQLite) — **not** YOLO/Torch. Detection stays on the host (`bash detection/run.sh`). Builds typically finish in under a minute.
+## Quick Start
+
+### 1. Clone Repository
 
 ```bash
-docker compose up --build -d
+git clone <https://github.com/sampankumarsinha/store-intelligence>
+cd store-intelligence
 ```
 
-API: http://localhost:8000  
-Docs: http://localhost:8000/docs
+### 2. Create Virtual Environment
 
-## Known limitations
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
 
-- Re-ID uses trajectory/bbox similarity (no deep embedding model) — may miss re-entries after long gaps or wardrobe changes.
-- Staff detection is a uniform-color heuristic — false positives/negatives possible.
-- 7-day conversion baseline requires prior daily snapshots in SQLite (built up as metrics are queried).
-- Video mode requires `ultralytics`, OpenCV, and clips under `data/videos/`.
-- Cross-camera deduplication relies on consistent `visitor_id` assignment at entry camera.
+### 3. Install Dependencies
 
-## Licence
+```bash
+pip install -r requirements.txt
+```
 
-Challenge dataset — not for redistribution or model training.
+### 4. Start Backend
+
+```bash
+docker compose up --build
+```
+
+Verify:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Expected:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+---
+
+## Run Dashboard
+
+Open a new terminal:
+
+```bash
+source venv/bin/activate
+streamlit run dashboard.py
+```
+
+Open:
+
+```text
+http://localhost:8502
+```
+
+---
+
+## Video Processing Workflow
+
+1. Start API
+
+```bash
+docker compose up --build
+```
+
+2. Launch Dashboard
+
+```bash
+streamlit run dashboard.py
+```
+
+3. Upload CCTV video
+
+4. Select camera mapping
+
+5. Click:
+
+```text
+Process Video and Send Events
+```
+
+6. Events are generated and ingested automatically
+
+7. Dashboard updates metrics in real time
+
+---
+
+## Event Processing Pipeline
+
+```text
+Video
+ ↓
+YOLO Detection
+ ↓
+Tracking
+ ↓
+Structured Event Generation
+ ↓
+/events/ingest
+ ↓
+Metrics
+ ↓
+Dashboard
+```
+
+Generated events include:
+
+* ENTRY
+* EXIT
+* ZONE_DWELL
+* BILLING_QUEUE_JOIN
+
+---
+
+## API Endpoints
+
+### Health
+
+```bash
+curl http://localhost:8000/health
+```
+
+### Metrics
+
+```bash
+curl http://localhost:8000/stores/STORE_001/metrics
+```
+
+### Funnel
+
+```bash
+curl http://localhost:8000/stores/STORE_001/funnel
+```
+
+### Heatmap
+
+```bash
+curl http://localhost:8000/stores/STORE_001/heatmap
+```
+
+### Anomalies
+
+```bash
+curl http://localhost:8000/stores/STORE_001/anomalies
+```
+
+---
+
+## Dashboard Features
+
+### Visitor Analytics
+
+* Unique Visitors
+* Entry Count
+* Exit Count
+
+### Funnel Analytics
+
+* Entry
+* Zone Visit
+* Billing Queue
+* Purchase
+
+### Heatmap Analytics
+
+* Zone Visits
+* Dwell Time
+* Engagement Score
+
+### Operational Alerts
+
+* Dead Zones
+* Queue Congestion
+* Feed Health
+
+### Detection Verification
+
+* Event Validation
+* Visitor Tracking Validation
+* Supported Features Summary
+
+---
+
+## Testing
+
+Run:
+
+```bash
+pytest
+```
+
+Coverage:
+
+```bash
+pytest --cov=app --cov-report=term
+```
+
+Target:
+
+```text
+Coverage > 70%
+```
+
+---
+
+## Design Decisions
+
+See:
+
+* DESIGN.md
+* CHOICES.md
+
+These documents explain:
+
+* Architecture choices
+* Tracking approach
+* Event schema design
+* Scalability considerations
+* Trade-offs and limitations
+
+---
+
+## Known Limitations
+
+* Visitor counts are based on tracked identities.
+* Heavy occlusion may reduce tracking accuracy.
+* Cross-camera re-identification is limited.
+* Staff exclusion is heuristic-based.
+* Re-entry tracking is approximate.
+
+---
+
+## Future Enhancements
+
+* DeepSORT Integration
+* ByteTrack Integration
+* Cross-Camera Re-Identification
+* PostgreSQL Event Storage
+* Kafka Streaming Pipeline
+* Multi-Store Analytics
+* Real-Time RTSP Streams
+
+---
+
+## Live Deployment
+
+### Render API
+
+https://store-intelligence-api-hl9i.onrender.com
+
+### Streamlit Dashboard
+
+<STREAMLIT_URL>
+
+### GitHub Repository
+
+https://github.com/sampankumarsinha/store-intelligence
+
+---
+
+## Submission Coverage
+
+✓ Detection Pipeline
+
+✓ Structured Event Generation
+
+✓ FastAPI Intelligence Layer
+
+✓ Funnel Analytics
+
+✓ Heatmap Analytics
+
+✓ Queue Monitoring
+
+✓ Operational Alerts
+
+✓ Health Monitoring
+
+✓ Docker Deployment
+
+✓ Automated Testing
+
+✓ Dashboard Visualization
+
+✓ Production Scalability Discussion
