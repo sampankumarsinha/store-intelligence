@@ -8,11 +8,22 @@
       },
       "cameras": [
         {
-          "camera_id": "CAM_1",
-          "video_file": "CAM 1.mp4",
+          "camera_id": "CAM_3",
+          "video_file": "CAM 3.mp4",
           "type": "ENTRY",
           "entry_line": [[0, 600], [1920, 600]],
           "zones": []
+        },
+        {
+          "camera_id": "CAM_1",
+          "video_file": "CAM 1.mp4",
+          "type": "FLOOR",
+          "zones": [
+            {
+              "zone_id": "COSMETICS_A",
+              "polygon": [[200, 200], [1700, 200], [1700, 950], [200, 950]]
+            }
+          ]
         },
         {
           "camera_id": "CAM_2",
@@ -20,19 +31,30 @@
           "type": "FLOOR",
           "zones": [
             {
-              "zone_id": "MAIN_FLOOR",
+              "zone_id": "COSMETICS_B",
               "polygon": [[200, 200], [1700, 200], [1700, 950], [200, 950]]
             }
           ]
         },
         {
-          "camera_id": "CAM_3",
-          "video_file": "CAM 3.mp4",
+          "camera_id": "CAM_5",
+          "video_file": "CAM 5.mp4",
           "type": "BILLING",
           "zones": [
             {
               "zone_id": "BILLING",
               "polygon": [[300, 250], [1600, 250], [1600, 1000], [300, 1000]]
+            }
+          ]
+        },
+        {
+          "camera_id": "CAM_4",
+          "video_file": "CAM 4.mp4",
+          "type": "WAREHOUSE",
+          "zones": [
+            {
+              "zone_id": "WAREHOUSE",
+              "polygon": [[100, 100], [1800, 100], [1800, 1000], [100, 1000]]
             }
           ]
         }

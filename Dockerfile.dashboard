@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-dashboard.txt .
+RUN pip install --no-cache-dir -r requirements-dashboard.txt
+
+COPY dashboard_cloud.py .
+
+ENV API_URL=http://api:8000
+ENV STORE_ID=STORE_001
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "dashboard_cloud.py", "--server.address=0.0.0.0", "--server.port=8501", "--browser.gatherUsageStats=false"]

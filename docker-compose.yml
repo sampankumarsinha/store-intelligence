@@ -1,8 +1,30 @@
 services:
-  store-intelligence-api:
+  api:
     build: .
     container_name: store-intelligence-api
     ports:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+    environment:
+      - DATABASE_PATH=/app/data/store.db
+      - POS_PATH=/app/data/pos_transactions.csv
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: store-intelligence-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+      - STORE_ID=STORE_001
+    depends_on:
+      api:
+        condition: service_healthy

@@ -1,0 +1,53 @@
+{
+  "stores": [
+    {
+      "store_id": "ST1076",
+      "open_hours": { "start": "10:00", "end": "22:00" },
+      "cameras": [
+        {
+          "camera_id": "CAM_1",
+          "video_file": "entry_1.mp4",
+          "type": "ENTRY",
+          "entry_line": [[0, 600], [1920, 600]],
+          "zones": []
+        },
+        {
+          "camera_id": "CAM_2",
+          "video_file": "entry_2.mp4",
+          "type": "ENTRY",
+          "entry_line": [[0, 600], [1920, 600]],
+          "zones": []
+        },
+        {
+          "camera_id": "CAM_3",
+          "video_file": "zone.mp4",
+          "type": "FLOOR",
+          "zones": [
+            {
+              "zone_id": "PURPLLE_MUM_1076_Z01",
+              "polygon": [[200, 200], [1700, 200], [1700, 950], [200, 950]],
+              "sku_zone": "Left Shelf"
+            },
+            {
+              "zone_id": "PURPLLE_MUM_1076_Z02",
+              "polygon": [[300, 300], [1600, 300], [1600, 900], [300, 900]],
+              "sku_zone": "Center Display"
+            }
+          ]
+        },
+        {
+          "camera_id": "CAM_4",
+          "video_file": "billing_area.mp4",
+          "type": "BILLING",
+          "zones": [
+            {
+              "zone_id": "PURPLLE_MUM_1076_Z_BILLING_01",
+              "polygon": [[300, 250], [1600, 250], [1600, 1000], [300, 1000]],
+              "sku_zone": "BILLING"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

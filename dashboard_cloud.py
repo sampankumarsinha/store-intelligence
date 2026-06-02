@@ -1,9 +1,11 @@
-import streamlit as st
-import requests
-import pandas as pd
+import os
 
-API_BASE = "https://store-intelligence-api-hl9i.onrender.com"
-STORE_ID = "STORE_001"
+import pandas as pd
+import requests
+import streamlit as st
+
+API_BASE = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
+STORE_ID = os.getenv("STORE_ID", "STORE_001")
 
 
 def load_api_data():
@@ -136,9 +138,11 @@ st.divider()
 
 col1, col2, col3, col4, col5 = st.columns(5)
 
+funnel_counts = funnel.get("funnel", {})
+
 col1.metric("Visitors", metrics.get("unique_visitors", 0))
-col2.metric("Entries", metrics.get("entry_count", 0))
-col3.metric("Billing Visitors", metrics.get("billing_visitors", 0))
+col2.metric("Entries", funnel_counts.get("entry", 0))
+col3.metric("Billing Visitors", funnel_counts.get("billing_queue", 0))
 col4.metric("Conversion Rate", f'{metrics.get("conversion_rate", 0)}%')
 col5.metric("Queue Depth", metrics.get("current_queue_depth", 0))
 
@@ -158,8 +162,9 @@ with insight_col1:
         st.success(f"Conversion is healthy at {metrics.get('conversion_rate', 0)}%.")
 
 with insight_col2:
-    if metrics.get("billing_visitors", 0) > 0:
-        st.success(f"{metrics.get('billing_visitors', 0)} visitors reached the billing zone.")
+    billing_n = funnel_counts.get("billing_queue", 0)
+    if billing_n > 0:
+        st.success(f"{billing_n} visitors reached the billing zone.")
     else:
         st.info("No billing-zone visitors detected yet.")
 
