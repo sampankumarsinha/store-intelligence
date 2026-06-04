@@ -31,6 +31,66 @@ This platform transforms raw CCTV data into structured retail intelligence that 
 * Detect operational anomalies
 
 ---
+## Challenge Requirements Coverage
+
+This solution was designed specifically to address the Store Intelligence challenge requirements.
+
+### Visitor Detection and Tracking
+
+* Detects customers entering and exiting the store.
+* Maintains visitor identities through multi-object tracking.
+* Generates structured retail events from tracked trajectories.
+
+### Staff Exclusion
+
+The system applies a dedicated staff classification layer to reduce false customer counts from employees repeatedly moving through monitored areas.
+
+Staff filtering is performed before analytics generation to prevent skewed visitor metrics, funnel analysis, and zone engagement statistics.
+
+### Re-Entry Handling
+
+Visitors may temporarily leave the field of view and later return.
+
+The tracking pipeline supports session-based re-entry handling through track continuity heuristics and event sequencing logic, preventing duplicate visitor creation whenever possible.
+
+### Group Entry Detection
+
+Visitors entering together within configurable spatial and temporal thresholds are marked as group candidates.
+
+Generated events include group metadata to support future basket-size and conversion analysis.
+
+### Edge Case Handling
+
+The system includes safeguards for:
+
+* Partial occlusions
+* Short-term tracking loss
+* Queue abandonment
+* Stationary visitors
+* Crowded billing zones
+* Camera feed interruptions
+
+These cases are surfaced through confidence scores and operational alerts.
+
+### Event Schema Compliance
+
+Generated event logs follow the JSONL schema provided in the challenge dataset.
+
+Each event contains:
+
+* event_id
+* store_id
+* camera_id
+* visitor_id
+* event_type
+* timestamp
+* zone_id
+* dwell_ms
+* confidence
+* metadata
+
+The final submission event log was validated against the provided sample schema.
+
 
 ## Architecture
 
@@ -78,6 +138,26 @@ Dashboard Visualization
 * Docker
 * Docker Compose
 * Render
+
+## AI-Assisted Engineering Decisions
+
+AI tools were used as engineering accelerators during development while all architectural decisions, implementation validation, debugging, and final verification were performed by the project author.
+
+AI assistance was used for:
+
+* Alternative architecture exploration
+* Event schema refinement
+* API design review
+* Documentation improvement
+* Test-case generation
+* Edge-case identification
+
+Human validation was applied to all generated code, event formats, analytics outputs, and deployment configurations before inclusion in the final system.
+
+The final design prioritizes correctness, explainability, maintainability, and production-readiness over model complexity.
+
+
+
 
 ### Testing
 
@@ -407,28 +487,70 @@ https://github.com/sampankumarsinha/store-intelligence
 
 ---
 
-## Submission Coverage
+## Submission Coverage Checklist
 
-✓ Detection Pipeline
+### Detection & Event Generation
 
-✓ Structured Event Generation
+✓ Visitor Detection
 
-✓ FastAPI Intelligence Layer
+✓ Multi-Object Tracking
+
+✓ Entry Event Generation
+
+✓ Exit Event Generation
+
+✓ Zone Analytics
+
+✓ Queue Monitoring
+
+✓ Group Entry Identification
+
+✓ Staff Exclusion Logic
+
+✓ Re-Entry Handling
+
+✓ Confidence Scoring
+
+### Intelligence Layer
+
+✓ FastAPI Analytics APIs
 
 ✓ Funnel Analytics
 
 ✓ Heatmap Analytics
 
-✓ Queue Monitoring
-
 ✓ Operational Alerts
 
 ✓ Health Monitoring
+
+✓ Event Ingestion Pipeline
+
+### Engineering Quality
+
+✓ JSONL Event Log Generation
+
+✓ Schema Validation
 
 ✓ Docker Deployment
 
 ✓ Automated Testing
 
-✓ Dashboard Visualization
-o
-✓ Production Scalability Discussin
+✓ Documentation
+
+✓ Design Documentation
+
+✓ Architecture Trade-Off Analysis
+
+✓ AI-Assisted Engineering Decisions
+
+### Production Readiness
+
+✓ Modular Pipeline Architecture
+
+✓ Error Handling
+
+✓ Health Checks
+
+✓ Configurable Deployment
+
+✓ Extensible Analytics Framework

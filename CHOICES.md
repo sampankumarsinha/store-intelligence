@@ -1,5 +1,8 @@
 # Engineering Choices
 
+This document explains the major engineering decisions made while designing the Store Intelligence Platform. For each component, alternative approaches were considered, AI-assisted recommendations were evaluated, and final selections were made based on challenge requirements, implementation complexity, explainability, and production readiness.
+
+
 ## 1. Detection Model Choice
 
 ### Options Considered
@@ -116,3 +119,168 @@ File:
 
 ```text
 dashboard.py
+---
+
+## 5. Staff Exclusion Strategy
+
+### Problem
+
+Retail employees frequently move across store zones and billing areas. Treating staff as customers would inflate visitor counts, dwell time metrics, conversion funnels, and queue analytics.
+
+### Options Considered
+
+| Option                       | Pros                            | Cons                                           |
+| ---------------------------- | ------------------------------- | ---------------------------------------------- |
+| Uniform Detection            | High accuracy if uniforms exist | Not applicable to all stores                   |
+| Face Recognition             | Strong identification           | Privacy concerns and additional infrastructure |
+| Dedicated Staff Badges       | Reliable                        | Requires external systems                      |
+| Rule-Based Movement Analysis | Simple and explainable          | Less precise                                   |
+
+### What AI Suggested
+
+AI suggested a dedicated appearance-based classifier combined with re-identification embeddings and facial recognition.
+
+### What I Chose
+
+A lightweight rule-based staff classifier using camera context, movement patterns, and staff-only zone access.
+
+Reasons:
+
+* Deterministic and explainable.
+* Easy to validate during evaluation.
+* No privacy-sensitive biometric processing.
+* Works without additional training data.
+
+### Trade-off
+
+The approach prioritizes simplicity and reproducibility over perfect staff identification accuracy.
+
+---
+
+## 6. Re-Entry Handling
+
+### Problem
+
+Customers may temporarily leave a camera view and reappear later.
+
+Naively assigning a new visitor ID each time would inflate visitor counts.
+
+### What AI Suggested
+
+AI recommended DeepSORT, ByteTrack, and OSNet-based person re-identification.
+
+### What I Chose
+
+Session-based re-entry handling using track continuity heuristics.
+
+The system:
+
+* Maintains track history.
+* Uses temporal proximity.
+* Preserves session sequence metadata.
+* Avoids unnecessary visitor duplication.
+
+### Trade-off
+
+The approach works well for challenge-scale clips but may fail under prolonged disappearance or cross-camera transitions.
+
+Production deployments would use dedicated re-identification models.
+
+---
+
+## 7. Group Entry Detection
+
+### Problem
+
+Retail customers often enter as families or small groups.
+
+Tracking them independently can lose valuable behavioral context.
+
+### What AI Suggested
+
+AI proposed clustering trajectories using spatio-temporal embeddings.
+
+### What I Chose
+
+A lightweight group candidate approach.
+
+Visitors are marked as group candidates when:
+
+* Entry timestamps are very close.
+* Spatial distance is below a threshold.
+* Motion direction is consistent.
+
+Generated events include:
+
+* group_candidate
+* group_id
+* group_size
+
+when confidence is sufficient.
+
+### Trade-off
+
+The solution favors explainability and robustness over sophisticated clustering techniques.
+
+---
+
+## 8. Production Readiness Decisions
+
+### Goal
+
+The challenge evaluates production readiness in addition to analytics quality.
+
+### Decisions Made
+
+#### Containerization
+
+* Dockerfile included.
+* Docker Compose orchestration included.
+* Reproducible deployment environment.
+
+#### Health Monitoring
+
+* Dedicated `/health` endpoint.
+* Feed status monitoring.
+* Detection validation utilities.
+
+#### Testing
+
+* Automated pytest suite.
+* Event validation tests.
+* API correctness checks.
+
+#### Fault Tolerance
+
+* Confidence-based event generation.
+* Graceful handling of missing detections.
+* Validation before ingestion.
+
+### Trade-off
+
+The system remains lightweight while still demonstrating operational deployment practices.
+
+---
+
+## 9. AI-Assisted Engineering Decisions
+
+AI tools were used as engineering assistants during development.
+
+AI contributed to:
+
+* Architecture exploration
+* Event schema refinement
+* API design review
+* Test-case generation
+* Documentation drafting
+* Edge-case identification
+
+All implementation decisions, debugging, validation, event generation logic, analytics verification, and deployment testing were performed manually before inclusion in the final submission.
+
+The final system prioritizes:
+
+* Explainability
+* Deterministic behavior
+* Reproducibility
+* Ease of evaluation
+* Production-oriented engineering practices

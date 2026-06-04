@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """Terminal live dashboard polling Store Intelligence API."""
 from __future__ import annotations
 
